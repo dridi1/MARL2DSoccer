@@ -289,8 +289,8 @@ class FootballEnv(object):
         assert horizontal_size==72
 
         # Define sizes of the objects on the field
-        self.field_size = (110, 76)
-        self.in_field_size = (100, 70)  # Real football field roughly 100m by 70m.
+        self.field_size = (60, 40)
+        self.in_field_size = (55, 35)  # Smaller field to simplify learning.
 
         field_x = self.in_field_size[0]  # x_size, y_size
         field_y = self.in_field_size[1]
@@ -298,14 +298,13 @@ class FootballEnv(object):
         self._pos_norm = field_x / 2.0
         self._reset_setup = reset_setup
 
-        self._add_touch_penalty = add_touch_penalty
-        print("Pentalty is False! Make it true again.")
+        self._add_touch_penalty = True  # enable collision penalty by default
 
         self.num_horizontal_pixels = horizontal_size
         self.num_vertical_pixels = int(horizontal_size * self.in_field_size[1] / self.in_field_size[0])
         assert self.num_horizontal_pixels > self.num_vertical_pixels
         print("Make the agents and goal smaller.")
-        self.goal_size = (3, 8*5)
+        self.goal_size = (2, 16)
 
         self._home_goal_reward = 0.0
 

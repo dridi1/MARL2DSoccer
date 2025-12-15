@@ -16,7 +16,8 @@ class FootballEnvWrapper:
 
     def __init__(self, render, num_per_team, do_team_switch=False, env_obs_type = "ppo_attention", action_space = "continuous",
                  game_step_lim=400, show_env_feedback=False, include_wait=False, heatmap_save_loc=None,
-                 reset_setup="position"):
+                 reset_setup="position", dense_shaping_coef: float = 0.0, proximity_coef: float = 0.0,
+                 possession_coef: float = 0.0):
         self._num_per_team = num_per_team
        
         self._action_space = action_space
@@ -31,6 +32,10 @@ class FootballEnvWrapper:
                                     heatmap_save_loc=heatmap_save_loc, reset_setup=reset_setup)
         self.num_channels = CustomFootballEnv.get_num_channels()
         self.prefix = "agent"
+        self._dense_shaping_coef = dense_shaping_coef
+        self._proximity_coef = proximity_coef
+        self._possession_coef = possession_coef
+        self._last_shaping_info = None
 
         # Don't change the game length again.
         self._environment.game_type = "fixed"
@@ -41,6 +46,7 @@ class FootballEnvWrapper:
     def reset_game(self):
         timestep, extras = self._environment.reset()
         batch_timestep = self.convert_and_batch_step(timestep, extras)
+        self._last_shaping_info = self._environment.get_reward_shaping_info()
         return batch_timestep
 
     def step(self, actions):
@@ -50,6 +56,76 @@ class FootballEnvWrapper:
         timestep, extras = self._environment.step(dict_actions)
         done = timestep.step_type == dm_env.StepType.LAST
         observations, states, rewards = self.convert_and_batch_step(timestep, extras)
+
+        shaping_info = self._environment.get_reward_shaping_info()
+
+        # Progress shaping: ball x-progress toward opponent goal (agent_0 perspective).
+        if self._dense_shaping_coef != 0.0 and self._last_shaping_info is not None:
+            try:
+                prev_ball_x = float(self._last_shaping_info[f"{self.prefix}_0"][2])
+                curr_ball_x = float(shaping_info[f"{self.prefix}_0"][2])
+                delta = curr_ball_x - prev_ball_x
+                shaped = self._dense_shaping_coef * delta
+                for i in range(len(rewards[0])):
+                    rewards[0][i] += shaped
+                for j in range(len(rewards[1])):
+                    rewards[1][j] -= shaped
+            except Exception:
+                pass
+
+        # Proximity shaping: bonus when team is closer (avg) to ball, penalty if far.
+        if self._proximity_coef != 0.0:
+            try:
+                team_dists = []
+                opp_dists = []
+                ball_x = float(shaping_info[f"{self.prefix}_0"][2])
+                ball_y = float(shaping_info[f"{self.prefix}_0"][3])
+                for idx, key in enumerate(sorted(shaping_info.keys(), key=sort_str_num)):
+                    p_x, p_y = shaping_info[key][0], shaping_info[key][1]
+                    d = np.sqrt((p_x - ball_x) ** 2 + (p_y - ball_y) ** 2)
+                    if idx < self._num_per_team:
+                        team_dists.append(d)
+                    else:
+                        opp_dists.append(d)
+                if team_dists:
+                    team_term = -self._proximity_coef * float(np.mean(team_dists))
+                    opp_term = self._proximity_coef * float(np.mean(opp_dists)) if opp_dists else 0.0
+                    for i in range(len(rewards[0])):
+                        rewards[0][i] += team_term
+                    for j in range(len(rewards[1])):
+                        rewards[1][j] += opp_term
+            except Exception:
+                pass
+
+        # Possession shaping: bonus if closest agent is ours, penalty otherwise.
+        if self._possession_coef != 0.0:
+            try:
+                ball_x = float(shaping_info[f"{self.prefix}_0"][2])
+                ball_y = float(shaping_info[f"{self.prefix}_0"][3])
+                min_dist = None
+                min_is_team = False
+                for idx, key in enumerate(sorted(shaping_info.keys(), key=sort_str_num)):
+                    p_x, p_y = shaping_info[key][0], shaping_info[key][1]
+                    d = np.sqrt((p_x - ball_x) ** 2 + (p_y - ball_y) ** 2)
+                    if min_dist is None or d < min_dist:
+                        min_dist = d
+                        min_is_team = idx < self._num_per_team
+                if min_dist is not None:
+                    if min_is_team:
+                        for i in range(len(rewards[0])):
+                            rewards[0][i] += self._possession_coef
+                        for j in range(len(rewards[1])):
+                            rewards[1][j] -= self._possession_coef
+                    else:
+                        for i in range(len(rewards[0])):
+                            rewards[0][i] -= self._possession_coef
+                        for j in range(len(rewards[1])):
+                            rewards[1][j] += self._possession_coef
+            except Exception:
+                pass
+
+        self._last_shaping_info = shaping_info
+
         return observations, states, rewards, done
 
     def convert_and_batch_step(self, timestep, extras):
