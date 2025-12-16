@@ -165,16 +165,17 @@ class Agent(object):
         y1 = self.pos[1] - cos_comp  + self.offset[1]
         x2 = self.pos[0] - sin_comp  + self.offset[0]
         y2 = self.pos[1] + cos_comp  + self.offset[1]
-        pygame.draw.line(field_surf, self.colour, (x1 * self.r_to_s - 1, y1 * self.r_to_s - 1),
-                         (x2 * self.r_to_s - 1, y2 * self.r_to_s - 1), 2)
+        start_leg = (int(round(x1 * self.r_to_s - 1)), int(round(y1 * self.r_to_s - 1)))
+        end_leg = (int(round(x2 * self.r_to_s - 1)), int(round(y2 * self.r_to_s - 1)))
+        pygame.draw.line(field_surf, self.colour, start_leg, end_leg, 2)
 
         sin_comp = self.radius * math.sin(self.rot)
         cos_comp = self.radius * math.cos(self.rot)
         x3 = self.pos[0] + cos_comp + self.offset[0]
         y3 = self.pos[1] + sin_comp + self.offset[1]
-        pygame.draw.line(field_surf, self.dir_col, ((self.pos[0]+ self.offset[0]) * self.r_to_s, (self.pos[1]+ self.offset[1]) * self.r_to_s),
-                         (x3 * self.r_to_s, y3 * self.r_to_s),
-                         2)
+        start_dir = (int(round((self.pos[0]+ self.offset[0]) * self.r_to_s)), int(round((self.pos[1]+ self.offset[1]) * self.r_to_s)))
+        end_dir = (int(round(x3 * self.r_to_s)), int(round(y3 * self.r_to_s)))
+        pygame.draw.line(field_surf, self.dir_col, start_dir, end_dir, 2)
 
 
 class Ball(object):
