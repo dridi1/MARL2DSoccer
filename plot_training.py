@@ -39,6 +39,7 @@ def plot_curves(
     output: Path,
     smooth: int,
     show_lengths: bool,
+    show_mean: bool,
 ) -> None:
     plt.figure(figsize=(8, 4.5))
 
@@ -52,6 +53,9 @@ def plot_curves(
         label = f"Reward (MA{smooth})"
 
     plt.plot(ep_axis, rewards_to_plot, label=label)
+    if show_mean and rewards:
+        mean_reward = float(np.mean(rewards))
+        plt.axhline(mean_reward, color="tab:red", linestyle="--", linewidth=1.5, label=f"Mean ({mean_reward:.3f})")
     plt.xlabel("Episode")
     plt.ylabel("Reward")
     plt.title("Training progress")
@@ -95,6 +99,11 @@ def main() -> None:
         action="store_true",
         help="Overlay episode lengths on a secondary axis",
     )
+    parser.add_argument(
+        "--mean-line",
+        action="store_true",
+        help="Overlay a horizontal line at the mean episode reward",
+    )
 
     args = parser.parse_args()
     if not args.input.exists():
@@ -104,7 +113,7 @@ def main() -> None:
     if not episodes:
         raise ValueError("No rows found in CSV")
 
-    plot_curves(episodes, rewards, lengths, args.output, args.smooth, args.show_lengths)
+    plot_curves(episodes, rewards, lengths, args.output, args.smooth, args.show_lengths, args.mean_line)
 
 
 if __name__ == "__main__":
